@@ -1,0 +1,105 @@
+#include <Wire.h>
+#include <Adafruit_MLX90614.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+Adafruit_MLX90614 mlx = Adafruit_MLX90614();
+
+const int buzzerPin = 2;
+const int ledPin = 3;
+const int buttonPin = 4;
+const int warningLedPin = 5;
+
+float tempThreshold = 37.5; // Umbral de temperatura en °C
+bool celsius = true; // Modo de temperatura (Celsius/Fahrenheit)
+
+void setup() {
+  Serial.begin(9600);
+  
+  // Inicializar componentes
+  pinMode(buzzerPin, OUTPUT);
+  pinMode(ledPin, OUTPUT);
+  pinMode(warningLedPin, OUTPUT);
+  pinMode(buttonPin, INPUT_PULLUP);
+  
+  // Inicializar pantalla OLED
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("Error en pantalla OLED"));
+    for(;;);
+  }
+  display.display();
+  delay(2000);
+  display.clearDisplay();
+  
+  // Inicializar sensor MLX90614
+  if (!mlx.begin()) {
+    Serial.println("Error al iniciar MLX90614");
+    while (1);
+  }
+  
+  // Mostrar mensaje inicial
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0,0);
+  display.println("Termometro Laser");
+  display.println("Iniciando...");
+  display.display();
+  delay(1000);
+}
+
+void loop() {
+  // Leer botón para cambiar unidad de temperatura
+  if (digitalRead(buttonPin) == LOW) {
+    celsius = !celsius;
+    delay(300); // Debounce
+  }
+  
+  // Leer temperaturas
+  float objectTemp = mlx.readObjectTempC();
+  float ambientTemp = mlx.readAmbientTempC();
+  
+  if (!celsius) {
+    objectTemp = (objectTemp * 9/5) + 32;
+    ambientTemp = (ambientTemp * 9/5) + 32;
+  }
+  
+  // Mostrar en pantalla OLED
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.setTextSize(1);
+  display.print("Temp Objeto: ");
+  display.setTextSize(2);
+  display.print(objectTemp, 1);
+  display.setTextSize(1);
+  display.println(celsius ? " C" : " F");
+  
+  display.setTextSize(1);
+  display.print("Temp Ambiente: ");
+  display.print(ambientTemp, 1);
+  display.println(celsius ? " C" : " F");
+  
+  display.setTextSize(1);
+  display.print("Modo: ");
+  display.println(celsius ? "Celsius" : "Fahrenheit");
+  
+  display.display();
+  
+  // Control de alarma y LEDs
+  if (objectTemp > tempThreshold) {
+    digitalWrite(warningLedPin, HIGH);
+    tone(buzzerPin, 1000, 200);
+    delay(200);
+  } else {
+    digitalWrite(warningLedPin, LOW);
+    digitalWrite(ledPin, HIGH);
+    delay(100);
+    digitalWrite(ledPin, LOW);
+  }
+  
+  delay(500); // Espera entre lecturas
+}
